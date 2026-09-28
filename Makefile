@@ -1,5 +1,5 @@
 .PHONY: help init init-host init-env init-dirs init-gitignore init-ssh-key init-ssh-config \
-	openspec-init
+	openspec-init build lint test
 
 .DEFAULT_GOAL := help
 
@@ -140,3 +140,28 @@ openspec-init: ## Развернуть инструменты SDD: openspec init
 	mkdir -p "$$accounts/$$profile"
 	docker compose --profile claude run --rm -T claude \
 		openspec init --tools claude --language ru
+
+# Вызов тулчейна Go: одноразовый контейнер сервиса extruder-build, команда приходит строкой.
+# Собран в одном месте и переиспользуется целями сборки, проверки и тестов — образ, профиль
+# и ключи запуска не расходятся между целями, а добавление цели не требует их повторять.
+go_run = docker compose --profile build run --rm -T extruder-build
+
+# Сборка бинарника. Тулчейна Go нет ни на хосте, ни в контейнере агента — он приходит образом
+# сервиса extruder-build, поэтому сборка идёт через compose, а не вызовом go напрямую.
+#
+# go mod tidy идёт перед сборкой: контрольные суммы зависимостей сборка сама не дописывает,
+# и без него первый прогон после новой зависимости падает на отсутствующей записи go.sum.
+build: ## Собрать бинарник Extruder в bin/
+	@$(go_run) "go mod tidy && go build -o bin/extruder ./cmd/extruder"
+	@echo "  собран bin/extruder"
+
+# Линтер целевого языка. Конфигурация лежит в .golangci.yml корня проекта;
+# набор правил задаётся там, а не ключами вызова.
+lint: ## Прогнать линтер Go
+	@$(go_run) "golangci-lint run ./..."
+	@echo "  линтер замечаний не нашёл"
+
+# Тесты модуля. Прогон полный: golden-тесты идут в памяти и тулчейна целевого языка
+# не требуют, поэтому отдельной цели под них нет.
+test: ## Прогнать тесты Go
+	@$(go_run) "go test ./..."

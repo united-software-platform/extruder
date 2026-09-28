@@ -40,3 +40,43 @@ services:
       # сам .env внутри контейнера пустой. compose читает его на хосте — маскировка не мешает
       - /dev/null:${PROJECT_DIR:-/app}/.env:ro
 
+  # Тулчейн сборки и проверки Go. Отдельный сервис, потому что в контейнере агента нет ни go,
+  # ни make, ни docker: без него критерий готовности этапа — «сборка и линтер чисты» —
+  # проверить неоткуда. Образ несёт и компилятор, и линтер, поэтому сервис один.
+  #
+  # Сервис одноразовый: цели Makefile вызывают его через `docker compose run --rm`, и работающим
+  # он не остаётся. Отсюда restart: "no" — исключение из DOCK-007, разрешённое DOCK-014.
+  extruder-build:
+    image: ${EXTRUDER_BUILD_IMAGE:-golangci/golangci-lint}:${EXTRUDER_BUILD_IMAGE_TAG:-v1.62-alpine}
+    container_name: extruder-build
+    # Отдельный compose-профиль: `docker compose up` тулчейн не поднимает
+    profiles: ["build"]
+    restart: "no"
+    working_dir: ${PROJECT_DIR:-/app}
+    # Команда приходит от цели Makefile строкой: одна точка входа на build, lint и test
+    entrypoint: ["/bin/sh", "-c"]
+    # Сборка идёт от пользователя хоста, иначе артефакты в смонтированном дереве
+    # достаются root и рабочее дерево становится недоступным на запись [DOCK-012]
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    environment:
+      # Кэши живут в смонтированном дереве, а не в домашнем каталоге и не в именованном томе:
+      # домашнего каталога у произвольного uid в образе нет, а именованный том создаётся
+      # принадлежащим root — сервис под uid хоста писать в него не смог бы. Каталог .gocache/
+      # принадлежит пользователю хоста и потому доступен на запись; из git он исключён.
+      GOCACHE: ${PROJECT_DIR:-/app}/.gocache/build
+      GOMODCACHE: ${PROJECT_DIR:-/app}/.gocache/mod
+      # Домашний каталог нужен линтеру: без него он пытается писать кэш в корень образа
+      # и падает на правах. Значение указывает туда же, в доступный на запись .gocache/
+      HOME: ${PROJECT_DIR:-/app}/.gocache
+      GOLANGCI_LINT_CACHE: ${PROJECT_DIR:-/app}/.gocache/lint
+      # Тулчейн не вызывает git: каталог .git принадлежит другому пользователю,
+      # и штатная проверка владельца репозитория оборвала бы сборку
+      GOFLAGS: -buildvcs=false
+    volumes:
+      - .:${PROJECT_DIR:-/app}          # то же рабочее дерево, что видит агент
+    networks:
+      - extruder-net
+
+networks:
+  extruder-net:
+    driver: bridge

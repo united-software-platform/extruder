@@ -2,3 +2,10 @@
 .ssh/
 .claude-accounts/
 .idea/
+
+# Артефакты сборки Go
+bin/
+.gocache/
+
+# Кэш байт-кода Python
+__pycache__/
