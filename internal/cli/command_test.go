@@ -1,4 +1,4 @@
-package infra_test
+package cli_test
 
 import (
 	"bytes"
@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/united-software-platform/extruder/internal/cli"
 	"github.com/united-software-platform/extruder/internal/profile/domain"
-	"github.com/united-software-platform/extruder/internal/profile/infra"
 )
 
 // run выполняет команду и возвращает код возврата вместе с обоими потоками.
 func run(args ...string) (int, string, string) {
 	var stdout, stderr bytes.Buffer
-	code := infra.Run(args, &stdout, &stderr)
+	code := cli.Run(args, &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 
@@ -188,5 +188,73 @@ func TestRunDoesNotTouchFilesystem(t *testing.T) {
 
 	if strings.Join(before, "\n") != strings.Join(after, "\n") {
 		t.Errorf("состав каталога изменился:\nдо:  %v\nпосле: %v", before, after)
+	}
+}
+
+func TestRunPrintsPlanAfterProfile(t *testing.T) {
+	code, stdout, stderr := run(fullArgs()...)
+	if code != 0 {
+		t.Fatalf("код возврата %d, ожидался 0; stderr: %s", code, stderr)
+	}
+	profileAt := strings.Index(stdout, string(domain.DimensionLanguage))
+	planAt := strings.Index(stdout, "План структуры:")
+	if planAt < 0 {
+		t.Fatalf("плана в выводе нет: %s", stdout)
+	}
+	if profileAt < 0 || profileAt > planAt {
+		t.Errorf("план предъявлен раньше профиля: %s", stdout)
+	}
+	for _, node := range []string{"модуль", "слой domain", "роль entity", "роль entrypoint"} {
+		if !strings.Contains(stdout, node) {
+			t.Errorf("в плане нет узла %q: %s", node, stdout)
+		}
+	}
+}
+
+func TestRunPrintsPlanWithoutExtraFlags(t *testing.T) {
+	code, stdout, _ := run(
+		"--language", "go", "--project-type", "service", "--architecture", "layered",
+	)
+	if code != 0 {
+		t.Fatalf("код возврата %d, ожидался 0", code)
+	}
+	if !strings.Contains(stdout, "План структуры:") {
+		t.Errorf("план не напечатан без дополнительных флагов: %s", stdout)
+	}
+}
+
+func TestRunPrintsNoPlanOnParseFailure(t *testing.T) {
+	for _, args := range [][]string{
+		{"--language", "go"},
+		{"--language", "rust", "--project-type", "service", "--architecture", "layered"},
+	} {
+		code, stdout, _ := run(args...)
+		if code == 0 {
+			t.Fatalf("ошибочный профиль принят: %v", args)
+		}
+		if stdout != "" {
+			t.Errorf("при отказе поток вывода не пуст: %s", stdout)
+		}
+	}
+}
+
+// Сценарий спецификации «Смена языка не меняет план» требует двух профилей, различающихся
+// только языком, а перечень допустимых языков состоит из одного значения: второй появится
+// на этапе 5 карты плана. До тех пор независимость от языка держится на устройстве кода —
+// построение принимает три измерения и языка не получает, — а этот тест проверяет лишь
+// устойчивость плана между вызовами.
+func TestRunPlanIsStableAcrossCalls(t *testing.T) {
+	_, first, _ := run(
+		"--language", "go", "--project-type", "service", "--architecture", "layered",
+	)
+	firstPlan := first[strings.Index(first, "План структуры:"):]
+
+	_, second, _ := run(
+		"--architecture", "layered", "--project-type", "service", "--language", "go",
+	)
+	secondPlan := second[strings.Index(second, "План структуры:"):]
+
+	if firstPlan != secondPlan {
+		t.Errorf("планы разошлись:\n%s\nпротив\n%s", firstPlan, secondPlan)
 	}
 }

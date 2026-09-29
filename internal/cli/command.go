@@ -1,6 +1,10 @@
-// Package infra содержит детали реализации модуля «профиль»: обработчик команды,
-// разбор аргументов и предъявление результата. Домен и слой приложения о нём не знают.
-package infra
+// Package cli — точка сборки инструмента: разбирает аргументы, вызывает сценарии модулей
+// и предъявляет результат.
+//
+// Пакет лежит вне модулей намеренно. Он знает и «профиль», и «план структуры», а модули друг
+// о друге не знают: иначе «профиль» зависел бы от «плана» ради одной печати, и межмодульная
+// зависимость пошла бы в обход контрактов домена [CLAR-023].
+package cli
 
 import (
 	"fmt"
@@ -9,8 +13,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/united-software-platform/extruder/internal/profile/app"
-	"github.com/united-software-platform/extruder/internal/profile/domain"
+	planapp "github.com/united-software-platform/extruder/internal/plan/app"
+	planinfra "github.com/united-software-platform/extruder/internal/plan/infra"
+	profileapp "github.com/united-software-platform/extruder/internal/profile/app"
+	profiledomain "github.com/united-software-platform/extruder/internal/profile/domain"
 )
 
 // Имена флагов: по одному на измерение. Независимость измерений видна прямо в синтаксисе —
@@ -41,7 +47,7 @@ func NewCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(command *cobra.Command, _ []string) error {
-			output, err := app.NewParseProfileUseCase().Execute(app.ParseProfileInput{
+			output, err := profileapp.NewParseProfileUseCase().Execute(profileapp.ParseProfileInput{
 				Language:     language,
 				ProjectType:  projectType,
 				Architecture: architecture,
@@ -50,29 +56,33 @@ func NewCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return writeProfile(command.OutOrStdout(), output.Profile)
+			out := command.OutOrStdout()
+			if err := writeProfile(out, output.Profile); err != nil {
+				return err
+			}
+			return writePlan(out, output.Profile)
 		},
 	}
 
 	flags := command.Flags()
-	flags.StringVar(&language, flagLanguage, "", flagUsage(domain.DimensionLanguage, true))
-	flags.StringVar(&projectType, flagProjectType, "", flagUsage(domain.DimensionProjectType, true))
-	flags.StringVar(&architecture, flagArchitecture, "", flagUsage(domain.DimensionArchitecture, true))
-	flags.StringSliceVar(&patterns, flagPatterns, nil, flagUsage(domain.DimensionPatterns, false))
+	flags.StringVar(&language, flagLanguage, "", flagUsage(profiledomain.DimensionLanguage, true))
+	flags.StringVar(&projectType, flagProjectType, "", flagUsage(profiledomain.DimensionProjectType, true))
+	flags.StringVar(&architecture, flagArchitecture, "", flagUsage(profiledomain.DimensionArchitecture, true))
+	flags.StringSliceVar(&patterns, flagPatterns, nil, flagUsage(profiledomain.DimensionPatterns, false))
 
 	return command
 }
 
 // flagUsage собирает подсказку флага из перечня домена: перечень значений в справке
 // и перечень, по которому идёт проверка, — один и тот же источник.
-func flagUsage(dimension domain.Dimension, required bool) string {
+func flagUsage(dimension profiledomain.Dimension, required bool) string {
 	obligation := "необязательно"
 	if required {
 		obligation = "обязательно"
 	}
 	return fmt.Sprintf(
 		"измерение %q (%s); допустимые значения: %s",
-		string(dimension), obligation, strings.Join(domain.AllowedValues(dimension), ", "),
+		string(dimension), obligation, strings.Join(profiledomain.AllowedValues(dimension), ", "),
 	)
 }
 
@@ -83,13 +93,13 @@ func longDescription() string {
 	builder.WriteString("Extruder превращает архитектурный профиль приложения в его начальную структуру.\n\n")
 	builder.WriteString("Профиль собирается из четырёх независимых измерений:\n")
 	rows := []struct {
-		dimension domain.Dimension
+		dimension profiledomain.Dimension
 		required  bool
 	}{
-		{domain.DimensionLanguage, true},
-		{domain.DimensionProjectType, true},
-		{domain.DimensionArchitecture, true},
-		{domain.DimensionPatterns, false},
+		{profiledomain.DimensionLanguage, true},
+		{profiledomain.DimensionProjectType, true},
+		{profiledomain.DimensionArchitecture, true},
+		{profiledomain.DimensionPatterns, false},
 	}
 	for _, row := range rows {
 		obligation := "необязательно"
@@ -99,7 +109,7 @@ func longDescription() string {
 		builder.WriteString(fmt.Sprintf(
 			"  %-20s %-14s допустимые значения: %s\n",
 			string(row.dimension), obligation,
-			strings.Join(domain.AllowedValues(row.dimension), ", "),
+			strings.Join(profiledomain.AllowedValues(row.dimension), ", "),
 		))
 	}
 	return builder.String()
@@ -107,16 +117,16 @@ func longDescription() string {
 
 // writeProfile предъявляет разобранный профиль: все четыре измерения с их значениями,
 // включая пустой набор паттернов.
-func writeProfile(out io.Writer, profile domain.Profile) error {
+func writeProfile(out io.Writer, profile profiledomain.Profile) error {
 	patterns := "—"
 	if !profile.Patterns().IsEmpty() {
 		patterns = strings.Join(profile.Patterns().Values(), ", ")
 	}
 	rows := [][2]string{
-		{string(domain.DimensionLanguage), profile.Language().String()},
-		{string(domain.DimensionProjectType), profile.ProjectType().String()},
-		{string(domain.DimensionArchitecture), profile.Architecture().String()},
-		{string(domain.DimensionPatterns), patterns},
+		{string(profiledomain.DimensionLanguage), profile.Language().String()},
+		{string(profiledomain.DimensionProjectType), profile.ProjectType().String()},
+		{string(profiledomain.DimensionArchitecture), profile.Architecture().String()},
+		{string(profiledomain.DimensionPatterns), patterns},
 	}
 	for _, row := range rows {
 		if _, err := fmt.Fprintf(out, "%-20s %s\n", row[0]+":", row[1]); err != nil {
@@ -124,6 +134,25 @@ func writeProfile(out io.Writer, profile domain.Profile) error {
 		}
 	}
 	return nil
+}
+
+// writePlan строит план структуры и предъявляет его после профиля.
+//
+// Построение получает три измерения, а не профиль целиком: измерение «язык» в фазу построения
+// не передаётся, и сослаться на него там не на что.
+func writePlan(out io.Writer, profile profiledomain.Profile) error {
+	structure, err := planapp.BuildPlan(
+		profile.ProjectType(),
+		profile.Architecture(),
+		profile.Patterns(),
+	)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out); err != nil {
+		return err
+	}
+	return planinfra.Write(out, structure)
 }
 
 // Run выполняет команду и возвращает код возврата процесса. Логика запуска живёт здесь,
