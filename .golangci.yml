@@ -1,0 +1,12 @@
+# Конфигурация линтера самого Extruder. Состав набора и отвергнутые линтеры объёма —
+# решение DEC-038 в docs/extruder-design.md.
+version: "2"
+
+linters:
+  # standard — набор golangci-lint по умолчанию: errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    # errorlint — сравнение и разбор ошибок в обход errors.Is/errors.As.
+    - errorlint
+    # revive — замена устаревшего golint: комментарии пакетов и экспортированных объектов, имена.
+    - revive

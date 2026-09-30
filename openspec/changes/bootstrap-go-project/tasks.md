@@ -1,41 +1,41 @@
 ## 1. Модуль и точка входа
 
-- [ ] 1.1 Создать `go.mod` с module path `github.com/united-software-platform/extruder` и строкой
+- [x] 1.1 Создать `go.mod` с module path `github.com/united-software-platform/extruder` и строкой
   `go 1.27` без директивы `toolchain`; проверка — `tools/host-runner/call.sh go-test` больше
   не сообщает «directory prefix . does not contain main module»
-- [ ] 1.2 Создать `cmd/extruder/main.go`: функция, возвращающая строку версии `0.0.0-dev`, печать
+- [x] 1.2 Создать `cmd/extruder/main.go`: функция, возвращающая строку версии `0.0.0-dev`, печать
   её в стандартный вывод и выход кодом `0`; проверка — `tools/host-runner/call.sh go-build` даёт
   `bin/extruder`, запуск печатает строку версии
-- [ ] 1.3 Создать `cmd/extruder/main_test.go`: тест проверяет, что строка версии непуста
+- [x] 1.3 Создать `cmd/extruder/main_test.go`: тест проверяет, что строка версии непуста
   и соответствует формату `X.Y.Z` с необязательным суффиксом предрелиза; проверка —
   `tools/host-runner/call.sh go-test` проходит
 
 ## 2. Каркас модулей
 
-- [ ] 2.1 Создать `internal/profile/{domain,application,infrastructure}/doc.go` — в каждом файле
+- [x] 2.1 Создать `internal/profile/{domain,application,infrastructure}/doc.go` — в каждом файле
   комментарий пакета одной строкой; проверка — три файла существуют, `go-build` проходит
-- [ ] 2.2 Создать `internal/generation/{domain,application,infrastructure}/doc.go` тем же
+- [x] 2.2 Создать `internal/generation/{domain,application,infrastructure}/doc.go` тем же
   образом; проверка — три файла существуют, `go-build` проходит
-- [ ] 2.3 Убедиться, что ни один `doc.go` не содержит кода, кроме объявления пакета
+- [x] 2.3 Убедиться, что ни один `doc.go` не содержит кода, кроме объявления пакета
   и комментария, и что каталоги не содержат `.gitkeep`; проверка — `git status` показывает
   ровно шесть новых файлов каркаса
 
 ## 3. Линтер
 
-- [ ] 3.1 Поставить линтер на хост целью `go-tools` (требует перезапущенного раннера с целью
+- [x] 3.1 Поставить линтер на хост целью `go-tools` (требует перезапущенного раннера с целью
   в белом списке); проверка — вывод цели печатает версию `golangci-lint` v2.14.0
-- [ ] 3.2 Создать `.golangci.yml` в формате v2 (`version: "2"`): дефолтный набор линтеров плюс
+- [x] 3.2 Создать `.golangci.yml` в формате v2 (`version: "2"`): дефолтный набор линтеров плюс
   `errorlint` и `revive`, метрики объёма (`funlen`, `dupl`, `gocyclo`, `wsl`) не включать;
   проверка — `tools/host-runner/call.sh go-lint` завершается без замечаний
-- [ ] 3.3 Убедиться, что `revive` не требует правок в шести `doc.go` и в `cmd/extruder`; проверка —
+- [x] 3.3 Убедиться, что `revive` не требует правок в шести `doc.go` и в `cmd/extruder`; проверка —
   повторный `go-lint` чист
 
 ## 4. Приёмка изменения
 
-- [ ] 4.1 Прогнать три цели подряд — `go-build`, `go-test`, `go-lint` — и убедиться, что все
+- [x] 4.1 Прогнать три цели подряд — `go-build`, `go-test`, `go-lint` — и убедиться, что все
   завершаются кодом `0`: это критерий готовности изменения в плане реализации
-- [ ] 4.2 Убедиться, что `Makefile`, `tools/host-runner/runner.py` и `README.md` остались
+- [x] 4.2 Убедиться, что `Makefile`, `tools/host-runner/runner.py` и `README.md` остались
   без изменений: правки окружения внесены задачей `EXT-006` и в это изменение не входят;
   проверка — `git status` не показывает их среди изменённых
-- [ ] 4.3 Проверить, что `bin/` и `.gocache/` не попали в индекс; проверка — `git status`
+- [x] 4.3 Проверить, что `bin/` и `.gocache/` не попали в индекс; проверка — `git status`
   не показывает их содержимого
