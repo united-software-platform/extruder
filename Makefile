@@ -1,5 +1,5 @@
 .PHONY: help init init-host init-env init-dirs init-gitignore init-ssh-key init-ssh-config \
-	openspec-init go-build go-test go-lint
+	openspec-init go-build go-test go-lint go-tools
 
 .DEFAULT_GOAL := help
 
@@ -141,10 +141,17 @@ openspec-init: ## Развернуть инструменты SDD: openspec init
 	docker compose --profile claude run --rm -T claude \
 		openspec init --tools claude --language ru
 
+# Каталоги инструментов Go на хосте. Раннер запускается из окружения, где их может
+# не быть в PATH, поэтому цели подставляют пути сами. Переопределяются из окружения.
+GO_BIN_DIR ?= /usr/local/go/bin
+GO_TOOLS_DIR ?= $(HOME)/go/bin
+GOLANGCI_VERSION ?= v2.14.0
+
 # Кэши инструментов Go уводятся в .gocache каталога проекта: Go в контейнере агента нет,
 # цели выполняются на хосте, и без явного указания кэш лёг бы в домашний каталог хоста.
 # Каталог .gocache игнорируется git и переживает пересоздание контейнера.
-go_env = GOCACHE=$(CURDIR)/.gocache/build \
+go_env = PATH=$(GO_BIN_DIR):$(GO_TOOLS_DIR):$$PATH \
+	GOCACHE=$(CURDIR)/.gocache/build \
 	GOMODCACHE=$(CURDIR)/.gocache/mod \
 	GOLANGCI_LINT_CACHE=$(CURDIR)/.gocache/lint
 
@@ -162,3 +169,10 @@ go-test: ## Прогнать тесты Go
 # как и самого Go.
 go-lint: ## Прогнать golangci-lint
 	@$(go_env) golangci-lint run
+
+# Установка линтера в GO_TOOLS_DIR силами самого Go: версия пинится GOLANGCI_VERSION,
+# повторный прогон идемпотентен — go install перезаписывает бинарник той же версией.
+go-tools: ## Поставить golangci-lint нужной версии на хост
+	@$(go_env) go install \
+		github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
+	@$(go_env) golangci-lint --version
