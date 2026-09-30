@@ -1,5 +1,5 @@
 .PHONY: help init init-host init-env init-dirs init-gitignore init-ssh-key init-ssh-config \
-	openspec-init
+	openspec-init go-build go-test go-lint
 
 .DEFAULT_GOAL := help
 
@@ -140,3 +140,25 @@ openspec-init: ## Развернуть инструменты SDD: openspec init
 	mkdir -p "$$accounts/$$profile"
 	docker compose --profile claude run --rm -T claude \
 		openspec init --tools claude --language ru
+
+# Кэши инструментов Go уводятся в .gocache каталога проекта: Go в контейнере агента нет,
+# цели выполняются на хосте, и без явного указания кэш лёг бы в домашний каталог хоста.
+# Каталог .gocache игнорируется git и переживает пересоздание контейнера.
+go_env = GOCACHE=$(CURDIR)/.gocache/build \
+	GOMODCACHE=$(CURDIR)/.gocache/mod \
+	GOLANGCI_LINT_CACHE=$(CURDIR)/.gocache/lint
+
+# Сборка бинарника проекта. Результат кладётся в bin/: каталог игнорируется git,
+# артефакт сборки в историю не попадает.
+go-build: ## Собрать бинарник Extruder в bin/extruder
+	@$(go_env) go build -o bin/extruder ./cmd/extruder
+
+# Тесты проекта. Отдельная цель, а не шаг сборки: прогон повторяется чаще сборки
+# и вызывается агентом через раннер самостоятельно.
+go-test: ## Прогнать тесты Go
+	@$(go_env) go test ./...
+
+# Линтер проекта. Требует golangci-lint на хосте: в контейнере агента его нет,
+# как и самого Go.
+go-lint: ## Прогнать golangci-lint
+	@$(go_env) golangci-lint run
