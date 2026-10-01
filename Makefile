@@ -1,5 +1,5 @@
 .PHONY: help init init-host init-env init-dirs init-gitignore init-ssh-key init-ssh-config \
-	openspec-init go-build go-test go-lint go-tools
+	openspec-init go-build go-test go-lint go-acceptance go-tools
 
 .DEFAULT_GOAL := help
 
@@ -166,9 +166,17 @@ go-test: ## Прогнать тесты Go
 	@$(go_env) go test ./...
 
 # Линтер проекта. Требует golangci-lint на хосте: в контейнере агента его нет,
-# как и самого Go.
+# как и самого Go. Тег acceptance передаётся явно: без него код приёмочного прогона остался бы
+# слепой зоной — ровно там, где живёт комбинаторика отбора профилей.
 go-lint: ## Прогнать golangci-lint
-	@$(go_env) golangci-lint run
+	@$(go_env) golangci-lint run --build-tags acceptance
+
+# Приёмочный прогон профилей. Тег сборки выводит его из go-test, поэтому обычный прогон тестов
+# остаётся быстрым. Ключ -v обязателен: строка охвата и вердикты печатаются журналом теста,
+# и без него успешный прогон их скрывает. Таймаут задан явно — умолчание go test меньше, чем
+# займут три свойства на каждом профиле.
+go-acceptance: ## Прогнать приёмочный прогон профилей
+	@$(go_env) go test -tags acceptance -v -timeout 60m ./test/acceptance
 
 # Установка линтера в GO_TOOLS_DIR силами самого Go: версия пинится GOLANGCI_VERSION,
 # повторный прогон идемпотентен — go install перезаписывает бинарник той же версией.
